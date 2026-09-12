@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RakshaConnect — Accident Alert</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg: #F6F4EF;
+    --surface: #FFFFFF;
+    --surface-2: #EFEDE6;
+    --ink: #16211C;
+    --ink-soft: #55605A;
+    --muted: #8A9089;
+    --line: #E2DFD5;
+    --teal: #1B4B43;
+    --teal-soft: #E4EEEB;
+    --brick: #C1432E;
+    --brick-soft: #FBE7E2;
+    --amber: #B8863B;
+    --radius-sm: 10px;
+    --radius-md: 16px;
+    --radius-lg: 22px;
+    --font: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; }
+  body{
+    font-family: var(--font);
+    background: var(--surface-2);
+    color: var(--ink);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    padding: 18px;
+  }
+  .shell{
+    width: 100%;
+    max-width: 400px;
+    height: 800px;
+    max-height: 92vh;
+    background: var(--bg);
+    border-radius: 34px;
+    box-shadow: 0 30px 60px rgba(22,33,28,0.22);
+    overflow: hidden;
+    position: relative;
+    display:flex;
+    flex-direction:column;
+    border: 1px solid var(--line);
+  }
+  .auth{ height:100%; display:flex; flex-direction:column; padding: 40px 28px 28px; overflow-y:auto; }
+  .brand{ display:flex; align-items:center; gap:10px; margin-bottom: 34px; }
+  .brand svg{ width:34px; height:34px; flex-shrink:0; }
+  .brand-text h1{ font-size:19px; font-weight:700; letter-spacing:-0.01em; }
+  .brand-text p{ font-size:12px; color:var(--ink-soft); margin-top:1px; }
+  .auth-heading{ margin-bottom: 22px; }
+  .auth-heading h2{ font-size: 26px; font-weight:700; letter-spacing:-0.02em; line-height:1.15; }
+  .auth-heading p{ font-size:13.5px; color:var(--ink-soft); margin-top:6px; }
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:12.5px; color:var(--ink-soft); margin-bottom:6px; font-weight:600; }
+  .field input, .field select, .field textarea{
+    width:100%; padding: 13px 14px; border-radius: var(--radius-sm); border: 1.5px solid var(--line);
+    background: var(--surface); font-family: var(--font); font-size: 14.5px; color: var(--ink); outline:none;
+    transition: border-color .15s ease;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus{ border-color: var(--teal); }
+  .field textarea{ resize:vertical; min-height:70px; }
+  .field-hint{ font-size:11.5px; color:var(--muted); margin-top:5px; }
+  .btn{ width:100%; padding: 14px; border-radius: var(--radius-sm); border:none; font-family: var(--font);
+    font-weight:700; font-size:14.5px; cursor:pointer; transition: transform .08s ease, opacity .15s ease; }
+  .btn:active{ transform: scale(0.985); }
+  .btn-primary{ background: var(--teal); color:#fff; }
+  .btn-primary:hover{ opacity:0.92; }
+  .btn-outline-danger{ background: var(--brick-soft); color: var(--brick); border:1.5px solid transparent;}
+  .auth-switch{ text-align:center; margin-top: 20px; font-size: 13px; color: var(--ink-soft); }
+  .auth-switch button{ background:none; border:none; color: var(--teal); font-weight:700; font-size:13px; cursor:pointer; font-family:var(--font); }
+  .error-text{ color: var(--brick); font-size:12.5px; margin-top:10px; min-height:16px; }
+  .app{ height:100%; display:none; flex-direction:column; }
+  .app.active{ display:flex; }
+  .topbar{ padding: 20px 20px 14px; display:flex; align-items:center; justify-content:space-between; border-bottom: 1px solid var(--line); background: var(--bg); }
+  .topbar .who{ display:flex; align-items:center; gap:10px; }
+  .avatar{ width:38px; height:38px; border-radius:50%; background: var(--teal); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .topbar h3{ font-size:15px; font-weight:700; }
+  .topbar .sub{ font-size:11.5px; color:var(--ink-soft); }
+  .icon-btn{ width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; background: var(--surface); border:1px solid var(--line); cursor:pointer; }
+  .icon-btn svg{ width:18px; height:18px; }
+  .pages{ flex:1; overflow-y:auto; padding: 20px; }
+  .page{ display:none; }
+  .page.active{ display:block; animation: fadeIn .25s ease; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  .navbar{ display:flex; border-top: 1px solid var(--line); background: var(--surface); padding: 8px 6px calc(10px + env(safe-area-inset-bottom)); }
+  .nav-item{ flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding: 6px 0; background:none; border:none; cursor:pointer; color: var(--muted); font-family: var(--font); }
+  .nav-item svg{ width:21px; height:21px; }
+  .nav-item span{ font-size:10.5px; font-weight:600; }
+  .nav-item.active{ color: var(--teal); }
+  .section-label{ font-size:11.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; margin: 22px 0 10px; }
+  .section-label:first-child{ margin-top:0; }
+  .detector-card{ background: var(--surface); border-radius: var(--radius-lg); padding: 26px 22px; border: 1px solid var(--line); text-align:center; }
+  .detector-ring{ width:150px; height:150px; border-radius:50%; margin: 4px auto 18px; display:flex; align-items:center; justify-content:center; background: var(--surface-2); border: 2px solid var(--line); transition: all .3s ease; position:relative; }
+  .detector-ring.on{ background: var(--teal-soft); border-color: var(--teal); }
+  .detector-ring.pending{ background: var(--brick-soft); border-color: var(--brick); animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{ box-shadow: 0 0 0 0 rgba(193,67,46,0.35); } 50%{ box-shadow: 0 0 0 16px rgba(193,67,46,0); } }
+  .detector-ring svg{ width:56px; height:56px; }
+  .detector-status{ font-size:15px; font-weight:700; margin-bottom:4px; }
+  .detector-desc{ font-size:12.5px; color:var(--ink-soft); line-height:1.5; margin-bottom:18px; }
+  .toggle-row{ display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:6px; }
+  .toggle{ width:50px; height:29px; border-radius:20px; background: var(--line); position:relative; cursor:pointer; transition: background .2s ease; flex-shrink:0; }
+  .toggle.on{ background: var(--teal); }
+  .toggle-knob{ width:23px; height:23px; border-radius:50%; background:#fff; position:absolute; top:3px; left:3px; transition: left .2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.25); }
+  .toggle.on .toggle-knob{ left:24px; }
+  .signal-grid{ display:grid; grid-template-columns: repeat(3,1fr); gap:8px; margin-top:20px; }
+  .signal-chip{ background: var(--surface-2); border-radius: var(--radius-sm); padding: 12px 6px; text-align:center; font-size:10.5px; font-weight:600; color:var(--ink-soft); border: 1px solid transparent; }
+  .signal-chip.tripped{ background: var(--brick-soft); color: var(--brick); border-color: var(--brick); }
+  .signal-chip svg{ width:16px; height:16px; margin:0 auto 6px; display:block; }
+  .test-link{ margin-top:16px; font-size:12px; color: var(--muted); text-decoration:underline; cursor:pointer; background:none; border:none; font-family:var(--font); }
+  .info-banner{ background: var(--teal-soft); border-radius: var(--radius-md); padding: 14px 16px; font-size:12.5px; color: var(--teal); line-height:1.5; display:flex; gap:10px; align-items:flex-start; margin-top:16px; }
+  .info-banner svg{ width:16px; height:16px; flex-shrink:0; margin-top:1px; }
+  .card{ background: var(--surface); border-radius: var(--radius-lg); padding:20px; border:1px solid var(--line); margin-bottom:16px; }
+  .card-title{ font-size:14px; font-weight:700; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+  .card-title svg{ width:17px; height:17px; color:var(--teal); }
+  .save-note{ font-size:11.5px; color:var(--muted); text-align:center; margin-top:2px; }
+  .search-bar{ display:flex; gap:8px; margin-bottom:18px; }
+  .search-bar input{ flex:1; padding:12px 14px; border-radius: var(--radius-sm); border:1.5px solid var(--line); background:var(--surface); font-family:var(--font); font-size:13.5px; outline:none; }
+  .search-bar input:focus{ border-color:var(--teal); }
+  .search-bar button{ width:44px; border-radius: var(--radius-sm); background:var(--teal); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .search-bar button svg{ width:17px; height:17px; color:#fff; }
+  .search-results{ margin-bottom:18px; }
+  .user-row{ display:flex; align-items:center; gap:10px; padding:10px; border-radius:var(--radius-sm); background:var(--surface); border:1px solid var(--line); margin-bottom:8px; }
+  .user-row .avatar{ width:32px; height:32px; font-size:12px; }
+  .user-row .u-name{ font-size:13px; font-weight:700; }
+  .user-row .u-id{ font-size:11px; color:var(--muted); }
+  .user-row .row-actions{ margin-left:auto; display:flex; gap:6px; }
+  .mini-btn{ padding:7px 10px; border-radius:8px; border:1px solid var(--line); background:var(--surface-2); font-size:11px; font-weight:700; cursor:pointer; font-family:var(--font); display:flex; align-items:center; gap:4px; }
+  .mini-btn svg{ width:13px; height:13px; }
+  .mini-btn.fav-active{ background: #FBF1DD; border-color: var(--amber); color:var(--amber); }
+  .mini-btn.send{ background: var(--teal); color:#fff; border-color:var(--teal); }
+  .fav-strip{ display:flex; gap:10px; overflow-x:auto; padding-bottom:6px; margin-bottom:4px; }
+  .fav-chip{ display:flex; flex-direction:column; align-items:center; gap:5px; flex-shrink:0; width:58px; }
+  .fav-chip .avatar{ width:44px; height:44px; font-size:15px; }
+  .fav-chip span{ font-size:10px; color:var(--ink-soft); text-align:center; }
+  .fav-empty{ font-size:12px; color:var(--muted); padding: 6px 2px; }
+  .alert-item{ background: var(--surface); border-radius: var(--radius-md); border:1px solid var(--line); padding:14px; margin-bottom:10px; display:flex; gap:12px; }
+  .alert-item.unread{ border-color: var(--brick); background: var(--brick-soft); }
+  .alert-icon{ width:38px; height:38px; border-radius:50%; background:var(--brick); flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  .alert-icon svg{ width:18px; height:18px; color:#fff; }
+  .alert-body{ flex:1; }
+  .alert-body .a-title{ font-size:13px; font-weight:700; margin-bottom:2px; }
+  .alert-body .a-msg{ font-size:12px; color:var(--ink-soft); line-height:1.5; margin-bottom:4px; word-break:break-word; }
+  .alert-body .a-msg a{ color: var(--teal); font-weight:700; text-decoration:underline; }
+  .alert-body .a-time{ font-size:10.5px; color:var(--muted); }
+  .empty-state{ text-align:center; padding: 40px 10px; color:var(--muted); }
+  .empty-state svg{ width:40px; height:40px; margin-bottom:10px; opacity:0.5; }
+  .empty-state p{ font-size:12.5px; }
+  .profile-head{ display:flex; flex-direction:column; align-items:center; padding: 10px 0 24px; }
+  .profile-head .avatar{ width:74px; height:74px; font-size:26px; margin-bottom:12px; }
+  .profile-head h2{ font-size:18px; font-weight:700; }
+  .profile-head p{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+  .profile-row{ display:flex; justify-content:space-between; align-items:center; padding:13px 2px; border-bottom:1px solid var(--line); font-size:13px; }
+  .profile-row:last-child{ border-bottom:none; }
+  .profile-row .p-label{ color:var(--ink-soft); }
+  .profile-row .p-val{ font-weight:600; text-align:right; max-width:60%; }
+  .toast{ position:absolute; bottom:100px; left:50%; transform:translateX(-50%) translateY(20px); background: var(--ink); color:#fff; padding: 12px 18px; border-radius: 12px; font-size:12.5px; font-weight:600; opacity:0; pointer-events:none; transition: all .25s ease; max-width:85%; text-align:center; z-index:50; }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .countdown-overlay{ position:absolute; inset:0; background: rgba(22,33,28,0.92); display:none; align-items:center; justify-content:center; flex-direction:column; padding: 30px; z-index:60; text-align:center; }
+  .countdown-overlay.show{ display:flex; }
+  .countdown-ring{ width:150px; height:150px; border-radius:50%; border:4px solid var(--brick); display:flex; align-items:center; justify-content:center; margin-bottom:26px; animation: pulse 1s ease-in-out infinite; }
+  .countdown-ring span{ font-size:44px; font-weight:800; color:#fff; }
+  .countdown-overlay h3{ color:#fff; font-size:18px; margin-bottom:8px; }
+  .countdown-overlay p{ color:#D8DAD5; font-size:13px; margin-bottom:26px; line-height:1.5; }
+  .countdown-overlay .btn{ max-width:260px; }
+  .permission-banner{ background: var(--brick-soft); color:var(--brick); border-radius: var(--radius-md); padding:12px 14px; font-size:12px; margin-top:14px; line-height:1.5; display:none; }
+  .permission-banner.show{ display:block; }
+  ::-webkit-scrollbar{ width:0; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <div class="auth" id="authScreen">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L4 5.5V11C4 16.5 7.4 21 12 22C16.6 21 20 16.5 20 11V5.5L12 2Z" stroke="#1B4B43" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12L11 14L15.5 9.5" stroke="#1B4B43" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="brand-text">
+        <h1>RakshaConnect</h1>
+        <p>Accident detection & emergency alerts</p>
+      </div>
+    </div>
+
+    <div id="loginForm">
+      <div class="auth-heading"><h2>Welcome back</h2><p>Apne account me login karein</p></div>
+      <div class="field"><label>Username</label><input type="text" id="loginUsername" placeholder="Enter username" autocomplete="username"></div>
+      <div class="field"><label>Password</label><input type="password" id="loginPassword" placeholder="Enter password" autocomplete="current-password"></div>
+      <div class="error-text" id="loginError"></div>
+      <button class="btn btn-primary" onclick="handleLogin()">Login</button>
+      <div class="auth-switch">Account nahi hai? <button onclick="showSignup()">Sign up</button></div>
+    </div>
+
+    <div id="signupForm" style="display:none;">
+      <div class="auth-heading"><h2>Create account</h2><p>Apni details bharein, safety zaroori hai</p></div>
+      <div class="field"><label>Full name</label><input type="text" id="suName" placeholder="e.g. Rohan Sharma"></div>
+      <div class="field"><label>Username</label><input type="text" id="suUsername" placeholder="Choose a unique username"></div>
+      <div class="field"><label>Password</label><input type="password" id="suPassword" placeholder="Create password"><div class="field-hint">Kam se kam 6 characters</div></div>
+      <div class="field"><label>Security question</label>
+        <select id="suSecQ">
+          <option value="pet">Aapke pehle pet ka naam?</option>
+          <option value="city">Aapke janm ka shehar?</option>
+          <option value="school">Aapke school ka naam?</option>
+        </select>
+      </div>
+      <div class="field"><label>Security answer</label><input type="text" id="suSecA" placeholder="Answer likhein"><div class="field-hint">Password bhool jane par isse recover hoga</div></div>
+      <div class="error-text" id="signupError"></div>
+      <button class="btn btn-primary" onclick="handleSignup()">Sign up</button>
+      <div class="auth-switch">Account already hai? <button onclick="showLogin()">Login</button></div>
+    </div>
+  </div>
+
+  <div class="app" id="appScreen">
+    <div class="topbar">
+      <div class="who">
+        <div class="avatar" id="topAvatar">R</div>
+        <div><h3 id="topName">—</h3><div class="sub" id="topSub">All systems normal</div></div>
+      </div>
+      <div class="icon-btn" onclick="goToPage('alerts')">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="#16211C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.73 21a2 2 0 01-3.46 0" stroke="#16211C" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+
+    <div class="pages">
+
+      <div class="page active" id="page-home">
+        <div class="section-label">Accident detector</div>
+        <div class="detector-card">
+          <div class="detector-ring" id="detectorRing">
+            <svg viewBox="0 0 24 24" fill="none" id="detectorIcon"><path d="M12 2L4 5.5V11C4 16.5 7.4 21 12 22C16.6 21 20 16.5 20 11V5.5L12 2Z" stroke="#8A9089" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 8V13" stroke="#8A9089" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="16" r="0.8" fill="#8A9089"/></svg>
+          </div>
+          <div class="detector-status" id="detectorStatus">Detection OFF hai</div>
+          <div class="detector-desc" id="detectorDesc">Enable karne par ye phone ke real motion sensor aur GPS se speed drop, rotation aur impact monitor karega.</div>
+          <div class="toggle-row">
+            <span style="font-size:12.5px; font-weight:600; color:var(--ink-soft);">Detection</span>
+            <div class="toggle" id="detectorToggle" onclick="toggleDetector()"><div class="toggle-knob"></div></div>
+          </div>
+          <div class="signal-grid">
+            <div class="signal-chip" id="sig-speed">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 4v4M4.9 7l2.8 2.8M19.1 7l-2.8 2.8"/><circle cx="12" cy="16" r="6"/><path d="M12 16l3-3"/></svg>
+              Speed drop
+            </div>
+            <div class="signal-chip" id="sig-rotation">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 4v5h-5"/></svg>
+              Rotation
+            </div>
+            <div class="signal-chip" id="sig-impact">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>
+              Impact
+            </div>
+          </div>
+          <button class="test-link" onclick="simulateAccident()">Test alert simulate karein (demo)</button>
+          <div class="permission-banner" id="permissionBanner">Motion ya location permission nahi mili. Detection sahi se kaam karne ke liye dono permissions allow karein (browser settings me).</div>
+        </div>
+        <div class="info-banner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+          <span>Accident confirm hone ke 20 second baad hi alert bhejta hai, taaki false trigger ko cancel kiya ja sake. Detection ON rakhoge to page reload hone par bhi khud ON ho jayega.</span>
+        </div>
+      </div>
+
+      <div class="page" id="page-medical">
+        <div class="section-label">Medical & emergency info</div>
+        <div class="card">
+          <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 10-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z"/></svg>Health details</div>
+          <div class="field"><label>Blood group</label>
+            <select id="medBlood"><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>O+</option><option>O-</option><option>AB+</option><option>AB-</option></select>
+          </div>
+          <div class="field"><label>Known medical conditions</label><textarea id="medConditions" placeholder="e.g. Diabetes, penicillin allergy — likhein ya 'None' rakhein"></textarea></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3.1 19.5 19.5 0 01-6-6A19.8 19.8 0 012.1 4.2 2 2 0 014 2h3a2 2 0 012 1.7c.1.9.3 1.8.6 2.6a2 2 0 01-.5 2.1L7.9 9.6a16 16 0 006 6l1.2-1.2a2 2 0 012.1-.5c.9.3 1.7.5 2.6.6a2 2 0 011.7 2z"/></svg>Your contact</div>
+          <div class="field"><label>Mobile number</label><input type="tel" id="medPhone" placeholder="+91 98765 43210"></div>
+          <div class="field" style="margin-bottom:0;"><label>Email</label><input type="email" id="medEmail" placeholder="you@example.com"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.9M16 3.1a4 4 0 010 7.8"/></svg>Family contact</div>
+          <div class="field"><label>Family member's number</label><input type="tel" id="famPhone" placeholder="+91 98765 43210"></div>
+          <div class="field" style="margin-bottom:0;"><label>Family member's email</label><input type="email" id="famEmail" placeholder="family@example.com"></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveMedical()">Save details</button>
+        <div class="save-note">Ye info sirf accident detect hone par location ke saath hospital, police aur family ko bheji jaayegi.</div>
+      </div>
+
+      <div class="page" id="page-alerts">
+        <div class="section-label">Send manually</div>
+        <div class="search-bar">
+          <input type="text" id="searchInput" placeholder="User id ya naam search karein" oninput="renderSearchResults()">
+          <button onclick="renderSearchResults()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
+        </div>
+        <div class="search-results" id="searchResults"></div>
+        <div class="section-label">Favourites — sabse pehle inform honge</div>
+        <div class="fav-strip" id="favStrip"></div>
+        <div class="section-label">Incoming alerts (40km ke andar)</div>
+        <div id="alertsList"></div>
+      </div>
+
+      <div class="page" id="page-profile">
+        <div class="profile-head">
+          <div class="avatar" id="profAvatar">R</div>
+          <h2 id="profName">—</h2>
+          <p id="profUsername">@—</p>
+        </div>
+        <div class="card">
+          <div class="field"><label>Address</label><input type="text" id="profAddress" placeholder="Apna address likhein"></div>
+          <div class="field" style="margin-bottom:0;"><label>Bio / about</label><textarea id="profBio" placeholder="Kuch line apne baare me"></textarea></div>
+        </div>
+        <div class="card">
+          <div class="profile-row"><span class="p-label">Username</span><span class="p-val" id="profRowUsername">—</span></div>
+          <div class="profile-row"><span class="p-label">Blood group</span><span class="p-val" id="profRowBlood">Set nahi hai</span></div>
+          <div class="profile-row"><span class="p-label">Detection status</span><span class="p-val" id="profRowDetection">OFF</span></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveProfile()" style="margin-bottom:12px;">Save profile</button>
+        <button class="btn btn-outline-danger" onclick="handleLogout()">Logout</button>
+      </div>
+
+    </div>
+
+    <div class="navbar">
+      <button class="nav-item active" data-page="home" onclick="goToPage('home')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11.5L12 4l9 7.5"/><path d="M5 10v9a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1v-9"/></svg><span>Home</span>
+      </button>
+      <button class="nav-item" data-page="medical" onclick="goToPage('medical')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 10-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z"/></svg><span>Medical</span>
+      </button>
+      <button class="nav-item" data-page="alerts" onclick="goToPage('alerts')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg><span>Alerts</span>
+      </button>
+      <button class="nav-item" data-page="profile" onclick="goToPage('profile')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg><span>Profile</span>
+      </button>
+    </div>
+
+    <div class="countdown-overlay" id="countdownOverlay">
+      <div class="countdown-ring"><span id="countdownNum">20</span></div>
+      <h3>Accident detect hua hai</h3>
+      <p>Agar ye galti se trigger hua hai, to neeche button dabakar cancel karein. Warna alert aapke contacts aur nearby users ko chala jaayega.</p>
+      <button class="btn btn-primary" onclick="cancelPendingAlert()">Main theek hoon, cancel karein</button>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+</div>
+
+<script>
+/* =====================================================
+   Backend: Supabase (auth + database + realtime)
+   Sensors: real DeviceMotion + Geolocation
+   Detection state persists across reloads (localStorage)
+   Alerts are geofenced: broadcast alerts only reach users
+   within ALERT_RADIUS_KM of the accident location.
+   ===================================================== */
+
+const SUPABASE_URL = "https://bxzbskokdzhrsnunbbed.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_toz-R8bG8cICkXXC97Ae-Q_Ou84eC2b";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const EMAIL_DOMAIN = "@rakshaconnectapp.com";
+const ALERT_RADIUS_KM = 40;
+const DETECTION_STORAGE_KEY = "rc_detection_on";
+
+let currentUser = null;
+let currentProfile = null;
+let favourites = [];
+let incomingAlerts = [];
+
+let detectionOn = false;
+let pendingActive = false;
+let pendingTimer = null;
+let pendingSeconds = 20;
+
+let motionHandler = null;
+let watchId = null;
+let lastSpeed = null;
+let lastSpeedTime = null;
+let lastCoords = null;
+let alertChannel = null;
+let locationShareInterval = null;
+
+let signalState = { speed:false, rotation:false, impact:false };
+let signalTimers = {};
+
+const IMPACT_THRESHOLD = 28;
+const ROTATION_THRESHOLD = 250;
+const SIGNAL_HOLD_MS = 4000;
+
+// ================= AUTH =================
+function showSignup(){ document.getElementById('loginForm').style.display='none'; document.getElementById('signupForm').style.display='block'; }
+function showLogin(){ document.getElementById('signupForm').style.display='none'; document.getElementById('loginForm').style.display='block'; }
+
+async function handleSignup(){
+  const name = document.getElementById('suName').value.trim();
+  const uname = document.getElementById('suUsername').value.trim().toLowerCase();
+  const pass = document.getElementById('suPassword').value;
+  const secQ = document.getElementById('suSecQ').value;
+  const secA = document.getElementById('suSecA').value.trim();
+  const err = document.getElementById('signupError');
+
+  if(!name || !uname || !pass || !secA){ err.textContent = "Saare fields zaroori hain."; return; }
+  if(pass.length < 6){ err.textContent = "Password kam se kam 6 characters ka ho."; return; }
+
+  err.textContent = "Account ban raha hai...";
+  const email = uname + EMAIL_DOMAIN;
+  const { data, error } = await sb.auth.signUp({ email, password: pass });
+  if(error){ err.textContent = error.message; return; }
+
+  const uid = data.user ? data.user.id : (data.session ? data.session.user.id : null);
+  if(!uid){ err.textContent = "Signup me dikkat aayi, dubara try karein."; return; }
+
+  const { error: profErr } = await sb.from('profiles').insert({
+    id: uid, username: uname, name, sec_q: secQ, sec_a: secA,
+    blood_group: 'O+', conditions: '', phone: '', email: '', fam_phone: '', fam_email: '', address: '', bio: ''
+  });
+  if(profErr){
+    err.textContent = profErr.code === '23505' ? "Ye username pehle se liya gaya hai." : profErr.message;
+    return;
+  }
+  err.textContent = "";
+
+  if(data.session){
+    showToast("Account ban gaya! Welcome, " + name);
+    await loadSession();
+  } else {
+    showToast("Account ban gaya — ab login karein");
+    showLogin();
+  }
+}
+
+async function handleLogin(){
+  const uname = document.getElementById('loginUsername').value.trim().toLowerCase();
+  const pass = document.getElementById('loginPassword').value;
+  const err = document.getElementById('loginError');
+  if(!uname || !pass){ err.textContent = "Username aur password dono bharein."; return; }
+
+  const email = uname + EMAIL_DOMAIN;
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if(error){ err.textContent = "Username ya password galat hai."; return; }
+  err.textContent = "";
+  await loadSession();
+}
+
+async function handleLogout(){
+  if(detectionOn) toggleDetector();
+  stopAlertListener();
+  stopLocationSharing();
+  await sb.auth.signOut();
+  currentUser = null; currentProfile = null;
+  document.getElementById('appScreen').classList.remove('active');
+  document.getElementById('authScreen').style.display = 'flex';
+  document.getElementById('loginUsername').value = '';
+  document.getElementById('loginPassword').value = '';
+  showLogin();
+}
+
+async function loadSession(){
+  const { data: { session } } = await sb.auth.getSession();
+  if(!session) return;
+  currentUser = session.user;
+  const { data: profile, error } = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
+  if(error || !profile){ showToast("Profile load nahi ho payi"); return; }
+  currentProfile = profile;
+  await loadFavourites();
+  await loadAlerts();
+  enterApp();
+  startAlertListener();
+  startLocationSharing();
+  await autoRestoreDetection();
+}
+
+function enterApp(){
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('appScreen').classList.add('active');
+  loadUserIntoUI();
+  goToPage('home');
+}
+
+function loadUserIntoUI(){
+  const p = currentProfile;
+  const initial = p.name.charAt(0).toUpperCase();
+  document.getElementById('topAvatar').textContent = initial;
+  document.getElementById('topName').textContent = p.name;
+  document.getElementById('profAvatar').textContent = initial;
+  document.getElementById('profName').textContent = p.name;
+  document.getElementById('profUsername').textContent = '@' + p.username;
+  document.getElementById('profRowUsername').textContent = p.username;
+  document.getElementById('medBlood').value = p.blood_group || 'O+';
+  document.getElementById('medConditions').value = p.conditions || '';
+  document.getElementById('medPhone').value = p.phone || '';
+  document.getElementById('medEmail').value = p.email || '';
+  document.getElementById('famPhone').value = p.fam_phone || '';
+  document.getElementById('famEmail').value = p.fam_email || '';
+  document.getElementById('profAddress').value = p.address || '';
+  document.getElementById('profBio').value = p.bio || '';
+  document.getElementById('profRowBlood').textContent = p.blood_group || 'Set nahi hai';
+  renderFavourites();
+}
+
+// ================= NAV / TOAST =================
+function goToPage(page){
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
+  if(page === 'alerts'){ renderSearchResults(); renderFavourites(); renderAlerts(); }
+}
+
+let toastTimer = null;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// ================= MEDICAL / PROFILE SAVE =================
+async function saveMedical(){
+  const updates = {
+    blood_group: document.getElementById('medBlood').value,
+    conditions: document.getElementById('medConditions').value.trim(),
+    phone: document.getElementById('medPhone').value.trim(),
+    email: document.getElementById('medEmail').value.trim(),
+    fam_phone: document.getElementById('famPhone').value.trim(),
+    fam_email: document.getElementById('famEmail').value.trim(),
+  };
+  const { error } = await sb.from('profiles').update(updates).eq('id', currentUser.id);
+  if(error){ showToast("Save nahi hua: " + error.message); return; }
+  Object.assign(currentProfile, updates);
+  document.getElementById('profRowBlood').textContent = updates.blood_group;
+  showToast("Medical details save ho gayi");
+}
+
+async function saveProfile(){
+  const updates = {
+    address: document.getElementById('profAddress').value.trim(),
+    bio: document.getElementById('profBio').value.trim(),
+  };
+  const { error } = await sb.from('profiles').update(updates).eq('id', currentUser.id);
+  if(error){ showToast("Save nahi hua: " + error.message); return; }
+  Object.assign(currentProfile, updates);
+  showToast("Profile update ho gaya");
+}
+
+// ================= SEARCH / FAVOURITES =================
+async function renderSearchResults(){
+  const q = document.getElementById('searchInput').value.trim();
+  const box = document.getElementById('searchResults');
+  box.innerHTML = "";
+  if(!q) return;
+  const { data, error } = await sb.from('profiles')
+    .select('id,username,name')
+    .neq('id', currentUser.id)
+    .or(`username.ilike.%${q}%,name.ilike.%${q}%`)
+    .limit(10);
+  if(error || !data || data.length === 0){ box.innerHTML = '<div class="fav-empty">Koi user nahi mila</div>'; return; }
+  data.forEach(u => {
+    const isFav = favourites.some(f => f.username === u.username);
+    const safeName = u.name.replace(/'/g, "\\'");
+    const row = document.createElement('div');
+    row.className = 'user-row';
+    row.innerHTML = `
+      <div class="avatar">${u.name.charAt(0).toUpperCase()}</div>
+      <div><div class="u-name">${u.name}</div><div class="u-id">@${u.username}</div></div>
+      <div class="row-actions">
+        <button class="mini-btn ${isFav ? 'fav-active' : ''}" onclick="toggleFavourite('${u.username}','${safeName}')">
+          <svg viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9"/></svg>
+          ${isFav ? 'Favourite' : 'Add'}
+        </button>
+        <button class="mini-btn send" onclick="sendManualAlert('${u.username}')">Alert bhejein</button>
+      </div>`;
+    box.appendChild(row);
+  });
+}
+
+async function toggleFavourite(uname, name){
+  const existing = favourites.find(f => f.username === uname);
+  if(existing){
+    await sb.from('favourites').delete().eq('user_id', currentUser.id).eq('fav_username', uname);
+    favourites = favourites.filter(f => f.username !== uname);
+  } else {
+    await sb.from('favourites').insert({ user_id: currentUser.id, fav_username: uname, fav_name: name });
+    favourites.push({ username: uname, name });
+  }
+  renderSearchResults();
+  renderFavourites();
+}
+
+async function loadFavourites(){
+  const { data } = await sb.from('favourites').select('fav_username, fav_name').eq('user_id', currentUser.id);
+  favourites = (data || []).map(f => ({ username: f.fav_username, name: f.fav_name }));
+}
+
+function renderFavourites(){
+  const strip = document.getElementById('favStrip');
+  strip.innerHTML = "";
+  if(favourites.length === 0){ strip.innerHTML = '<div class="fav-empty">Abhi koi favourite nahi — search karke family/friends add karein</div>'; return; }
+  favourites.forEach(f => {
+    const chip = document.createElement('div');
+    chip.className = 'fav-chip';
+    chip.innerHTML = `<div class="avatar">${f.name.charAt(0).toUpperCase()}</div><span>${f.name.split(' ')[0]}</span>`;
+    strip.appendChild(chip);
+  });
+}
+
+// ================= LOCATION SHARING (for 40km geofencing) =================
+function getCurrentLocationSafe(){
+  return new Promise(resolve => {
+    if(!navigator.geolocation){ resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null),
+      { timeout: 6000, enableHighAccuracy: true }
+    );
+  });
+}
+
+async function updateMyLocation(coords){
+  if(!currentUser || !coords) return;
+  const { error } = await sb.from('profiles').update({
+    last_lat: coords.lat, last_lng: coords.lng, last_loc_updated_at: new Date().toISOString()
+  }).eq('id', currentUser.id);
+  if(!error && currentProfile){ currentProfile.last_lat = coords.lat; currentProfile.last_lng = coords.lng; }
+}
+
+function startLocationSharing(){
+  const share = () => getCurrentLocationSafe().then(coords => { if(coords){ lastCoords = coords; updateMyLocation(coords); } });
+  share();
+  locationShareInterval = setInterval(share, 60000); // refresh apni location har 60s
+}
+function stopLocationSharing(){
+  if(locationShareInterval){ clearInterval(locationShareInterval); locationShareInterval = null; }
+}
+
+// Haversine distance in km
+function distanceKm(lat1, lon1, lat2, lon2){
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function withinRange(alertLat, alertLng){
+  if(alertLat == null || alertLng == null) return true; // alert has no location, can't filter — show it
+  if(!currentProfile || currentProfile.last_lat == null || currentProfile.last_lng == null) return true; // apni location abhi pata nahi — fail open
+  return distanceKm(currentProfile.last_lat, currentProfile.last_lng, alertLat, alertLng) <= ALERT_RADIUS_KM;
+}
+
+// ================= ALERTS (fixed message + live location link) =================
+function buildEmergencyMessage(p, coords){
+  const locText = coords ? `https://www.google.com/maps?q=${coords.lat},${coords.lng}` : 'Location not available';
+  return `Emergency: ${p.name} ka accident detect hua hai. Location: ${locText}. Blood group: ${p.blood_group || 'N/A'}. Conditions: ${p.conditions || 'None'}. Contact: ${p.phone || 'N/A'}. Family contact: ${p.fam_phone || 'N/A'}.`;
+}
+
+// Turn the raw maps URL inside the message into a clickable link for display
+function linkifyMessage(msg){
+  return msg.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">Live location dekhein</a>');
+}
+
+async function sendManualAlert(toUsername){
+  const coords = lastCoords || await getCurrentLocationSafe();
+  const msg = buildEmergencyMessage(currentProfile, coords);
+  const { error } = await sb.from('alerts').insert({
+    from_username: currentProfile.username, from_name: currentProfile.name,
+    to_username: toUsername, message: msg,
+    lat: coords ? coords.lat : null, lng: coords ? coords.lng : null
+  });
+  if(error){ showToast("Alert bhejne me dikkat aayi"); return; }
+  showToast(`Alert @${toUsername} ko bhej diya gaya (medical info + location)`);
+}
+
+async function sendAccidentAlert(){
+  document.getElementById('countdownOverlay').classList.remove('show');
+  document.getElementById('detectorRing').classList.remove('pending');
+  resetSignalChips();
+  const coords = lastCoords || await getCurrentLocationSafe();
+  const msg = buildEmergencyMessage(currentProfile, coords);
+  const { error } = await sb.from('alerts').insert({
+    from_username: currentProfile.username, from_name: currentProfile.name,
+    to_username: null, // broadcast — Realtime + loadAlerts filters this to within ALERT_RADIUS_KM
+    message: msg, lat: coords ? coords.lat : null, lng: coords ? coords.lng : null
+  });
+  if(error){ showToast("Alert bhejne me dikkat aayi: " + error.message); return; }
+  showToast("Alert bhej diya gaya — family, hospital aur 40km ke andar ke users ko notify kar diya");
+}
+
+function formatAlert(a){
+  return { title: `${a.from_name} — Accident Alert`, msg: linkifyMessage(a.message), time: new Date(a.created_at).toLocaleString('en-IN'), unread: true };
+}
+
+async function loadAlerts(){
+  const { data } = await sb.from('alerts').select('*')
+    .or(`to_username.eq.${currentProfile.username},to_username.is.null`)
+    .neq('from_username', currentProfile.username)
+    .order('created_at', { ascending: false }).limit(50);
+  incomingAlerts = (data || [])
+    .filter(a => a.to_username || withinRange(a.lat, a.lng)) // direct alerts always shown; broadcasts geofenced
+    .slice(0, 30)
+    .map(formatAlert);
+}
+
+function startAlertListener(){
+  alertChannel = sb.channel('alerts-channel')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alerts' }, payload => {
+      const a = payload.new;
+      if(a.from_username === currentProfile.username) return;
+      if(a.to_username && a.to_username !== currentProfile.username) return;
+      if(!a.to_username && !withinRange(a.lat, a.lng)) return; // broadcast, but out of 40km range
+      incomingAlerts.unshift(formatAlert(a));
+      renderAlerts();
+      showToast(`Naya alert: ${a.from_name}`);
+    })
+    .subscribe();
+}
+function stopAlertListener(){ if(alertChannel){ sb.removeChannel(alertChannel); alertChannel = null; } }
+
+function renderAlerts(){
+  const list = document.getElementById('alertsList');
+  list.innerHTML = "";
+  if(incomingAlerts.length === 0){
+    list.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg><p>Abhi koi alert nahi hai</p></div>`;
+    return;
+  }
+  incomingAlerts.forEach(a => {
+    const item = document.createElement('div');
+    item.className = 'alert-item' + (a.unread ? ' unread' : '');
+    item.innerHTML = `
+      <div class="alert-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg></div>
+      <div class="alert-body"><div class="a-title">${a.title}</div><div class="a-msg">${a.msg}</div><div class="a-time">${a.time}</div></div>`;
+    list.appendChild(item);
+  });
+}
+
+// ================= HOME: REAL SENSOR-BASED DETECTOR =================
+function setDetectionPersisted(on){ try{ localStorage.setItem(DETECTION_STORAGE_KEY, on ? '1' : '0'); }catch(e){} }
+function getDetectionPersisted(){ try{ return localStorage.getItem(DETECTION_STORAGE_KEY) === '1'; }catch(e){ return false; } }
+
+function applyDetectionOnUI(){
+  document.getElementById('detectorToggle').classList.add('on');
+  document.getElementById('detectorRing').classList.add('on');
+  document.getElementById('detectorStatus').textContent = "Detection ON hai";
+  document.getElementById('detectorDesc').textContent = "Phone ke motion sensor aur GPS se live monitor ho raha hai. Speed drop, rotation aur impact teeno saath hone par alert trigger hoga.";
+  document.getElementById('detectorIcon').innerHTML = '<path d="M12 2L4 5.5V11C4 16.5 7.4 21 12 22C16.6 21 20 16.5 20 11V5.5L12 2Z" stroke="#1B4B43" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12L11 14L15.5 9.5" stroke="#1B4B43" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>';
+  document.getElementById('topSub').textContent = "Detection active — monitoring";
+  document.getElementById('profRowDetection').textContent = "ON";
+}
+
+function applyDetectionOffUI(){
+  document.getElementById('detectorToggle').classList.remove('on');
+  document.getElementById('detectorRing').classList.remove('on');
+  document.getElementById('detectorStatus').textContent = "Detection OFF hai";
+  document.getElementById('detectorDesc').textContent = "Enable karne par ye phone ke real motion sensor aur GPS se speed drop, rotation aur impact monitor karega.";
+  document.getElementById('detectorIcon').innerHTML = '<path d="M12 2L4 5.5V11C4 16.5 7.4 21 12 22C16.6 21 20 16.5 20 11V5.5L12 2Z" stroke="#8A9089" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 8V13" stroke="#8A9089" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="16" r="0.8" fill="#8A9089"/>';
+  document.getElementById('topSub').textContent = "All systems normal";
+  document.getElementById('profRowDetection').textContent = "OFF";
+}
+
+async function toggleDetector(){
+  document.getElementById('permissionBanner').classList.remove('show');
+  if(!detectionOn){
+    const ok = await startSensors();
+    if(!ok){ document.getElementById('permissionBanner').classList.add('show'); return; }
+    detectionOn = true;
+    applyDetectionOnUI();
+    setDetectionPersisted(true);
+    showToast("Accident detection enable ho gaya");
+  } else {
+    stopSensors();
+    detectionOn = false;
+    applyDetectionOffUI();
+    resetSignalChips();
+    setDetectionPersisted(false);
+    showToast("Accident detection band kar diya");
+  }
+}
+
+async function autoRestoreDetection(){
+  if(!getDetectionPersisted()) return;
+  const ok = await startSensors();
+  if(ok){ detectionOn = true; applyDetectionOnUI(); }
+  else { setDetectionPersisted(false); }
+}
+
+async function startSensors(){
+  if(typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
+    try{
+      const res = await DeviceMotionEvent.requestPermission();
+      if(res !== 'granted') return false;
+    } catch(e){ return false; }
+  }
+  motionHandler = (e) => handleMotion(e);
+  window.addEventListener('devicemotion', motionHandler);
+
+  if(navigator.geolocation){
+    watchId = navigator.geolocation.watchPosition(handlePosition, () => {}, { enableHighAccuracy: true, maximumAge: 1000 });
+  }
+  return true;
+}
+
+function stopSensors(){
+  if(motionHandler){ window.removeEventListener('devicemotion', motionHandler); motionHandler = null; }
+  if(watchId !== null){ navigator.geolocation.clearWatch(watchId); watchId = null; }
+  lastSpeed = null; lastSpeedTime = null;
+}
+
+function handleMotion(e){
+  const acc = e.accelerationIncludingGravity || e.acceleration;
+  if(acc){
+    const mag = Math.sqrt((acc.x||0)**2 + (acc.y||0)**2 + (acc.z||0)**2);
+    if(mag > IMPACT_THRESHOLD) tripSignal('impact');
+  }
+  const rot = e.rotationRate;
+  if(rot){
+    const rotMag = Math.abs(rot.alpha||0) + Math.abs(rot.beta||0) + Math.abs(rot.gamma||0);
+    if(rotMag > ROTATION_THRESHOLD) tripSignal('rotation');
+  }
+}
+
+function handlePosition(pos){
+  const speed = pos.coords.speed;
+  const now = Date.now();
+  if(speed !== null && speed !== undefined){
+    if(lastSpeed !== null){
+      const drop = lastSpeed - speed;
+      const dt = (now - lastSpeedTime) / 1000;
+      if(lastSpeed > 5 && drop > 8 && dt < 2.5) tripSignal('speed');
+    }
+    lastSpeed = speed; lastSpeedTime = now;
+  }
+  lastCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+}
+
+function tripSignal(name){
+  signalState[name] = true;
+  document.getElementById('sig-' + name).classList.add('tripped');
+  clearTimeout(signalTimers[name]);
+  signalTimers[name] = setTimeout(() => {
+    signalState[name] = false;
+    document.getElementById('sig-' + name).classList.remove('tripped');
+  }, SIGNAL_HOLD_MS);
+
+  if(signalState.speed && signalState.rotation && signalState.impact && !pendingActive){
+    startPendingAlert();
+  }
+}
+
+function resetSignalChips(){
+  signalState = { speed:false, rotation:false, impact:false };
+  ['speed','rotation','impact'].forEach(s => {
+    document.getElementById('sig-' + s).classList.remove('tripped');
+    clearTimeout(signalTimers[s]);
+  });
+}
+
+function simulateAccident(){
+  if(!detectionOn){ showToast("Pehle detection ON karein"); return; }
+  ['speed','rotation','impact'].forEach((s, i) => setTimeout(() => tripSignal(s), i * 250));
+}
+
+function startPendingAlert(){
+  if(pendingActive) return;
+  pendingActive = true;
+  pendingSeconds = 20;
+  document.getElementById('countdownNum').textContent = pendingSeconds;
+  document.getElementById('countdownOverlay').classList.add('show');
+  document.getElementById('detectorRing').classList.add('pending');
+  pendingTimer = setInterval(() => {
+    pendingSeconds--;
+    document.getElementById('countdownNum').textContent = pendingSeconds;
+    if(pendingSeconds <= 0){
+      clearInterval(pendingTimer);
+      pendingActive = false;
+      sendAccidentAlert();
+    }
+  }, 1000);
+}
+
+function cancelPendingAlert(){
+  clearInterval(pendingTimer);
+  pendingActive = false;
+  document.getElementById('countdownOverlay').classList.remove('show');
+  document.getElementById('detectorRing').classList.remove('pending');
+  resetSignalChips();
+  showToast("Alert cancel ho gaya — sab theek hai");
+}
+
+// ---------- Init: restore session if already logged in ----------
+showLogin();
+loadSession();
+</script>
+
+</body>
+</html>
