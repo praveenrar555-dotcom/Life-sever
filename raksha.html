@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Raksha — Crash Detection & Alert</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#111417;
+    --bg-grid: rgba(255,255,255,0.035);
+    --surface:#1B1F23;
+    --surface-2:#22262B;
+    --surface-3:#282D33;
+    --border:#31363C;
+    --border-soft:#262B30;
+    --text:#F2F4F5;
+    --text-dim:#9199A1;
+    --text-faint:#5D646C;
+    --danger:#FF4B3E;
+    --danger-dim: rgba(255,75,62,0.14);
+    --warn:#FFB43A;
+    --warn-dim: rgba(255,180,58,0.14);
+    --safe:#33D399;
+    --safe-dim: rgba(51,211,153,0.14);
+    --accent:#4FA3FF;
+    --accent-dim: rgba(79,163,255,0.14);
+    --radius:10px;
+    --radius-sm:7px;
+    font-size:16px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 20% 0%, rgba(79,163,255,0.05), transparent 45%),
+      radial-gradient(circle at 85% 100%, rgba(255,75,62,0.04), transparent 45%),
+      var(--bg);
+    background-attachment:fixed;
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+  }
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(var(--bg-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+    background-size: 28px 28px;
+    pointer-events:none;
+    mask-image: radial-gradient(circle at 50% 30%, black, transparent 75%);
+    z-index:0;
+  }
+  #frame{
+    position:relative;
+    z-index:1;
+    width:100%;
+    max-width:432px;
+    min-height:100vh;
+    background:linear-gradient(180deg, #14181C 0%, #111417 100%);
+    border-left:1px solid var(--border-soft);
+    border-right:1px solid var(--border-soft);
+    display:flex;
+    flex-direction:column;
+    overflow-x:hidden;
+  }
+  h1,h2,h3{font-family:'Space Grotesk',sans-serif; margin:0; letter-spacing:-0.01em;}
+  p{margin:0;}
+  button{font-family:inherit; cursor:pointer;}
+  input,select,textarea{font-family:inherit;}
+  .tabular{font-variant-numeric:tabular-nums; font-feature-settings:"tnum";}
+
+  /* ---------- Scaffolding ---------- */
+  .screen{flex:1; display:flex; flex-direction:column; padding:22px 20px 100px; animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
+  .topbar{display:flex; align-items:center; justify-content:space-between; padding:18px 20px 6px;}
+  .brand{display:flex; align-items:center; gap:9px;}
+  .brand-mark{width:26px; height:26px; flex-shrink:0;}
+  .brand-name{font-family:'Space Grotesk'; font-weight:700; font-size:17px;}
+  .status-pill{display:flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:var(--text-dim); background:var(--surface); border:1px solid var(--border); padding:5px 10px 5px 8px; border-radius:99px;}
+  .status-dot{width:7px; height:7px; border-radius:50%; background:var(--text-faint); flex-shrink:0;}
+  .status-dot.on{background:var(--safe); box-shadow:0 0 0 3px var(--safe-dim);}
+  .status-dot.danger{background:var(--danger); box-shadow:0 0 0 3px var(--danger-dim);}
+
+  /* ---------- Form elements ---------- */
+  .field{display:flex; flex-direction:column; gap:7px; margin-bottom:16px;}
+  .field label{font-size:12.5px; font-weight:500; color:var(--text-dim);}
+  .field input, .field select{
+    background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+    border-radius:var(--radius-sm); padding:12px 13px; font-size:14.5px; outline:none;
+    transition:border-color .15s;
+    width:100%;
+  }
+  .field input:focus, .field select:focus{border-color:var(--accent);}
+  .field .hint{font-size:11.5px; color:var(--text-faint); margin-top:1px;}
+  .field .err{font-size:11.5px; color:var(--danger); margin-top:1px;}
+  .pass-wrap{position:relative;}
+  .pass-toggle{position:absolute; right:11px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-faint); font-size:11.5px; font-weight:600; padding:4px;}
+
+  .btn{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    border:none; border-radius:var(--radius-sm); padding:13px 16px;
+    font-size:14.5px; font-weight:600; width:100%;
+    transition:filter .15s, transform .05s;
+  }
+  .btn:active{transform:scale(0.985);}
+  .btn-primary{background:var(--accent); color:#0B1420;}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-ghost{background:var(--surface-2); color:var(--text); border:1px solid var(--border);}
+  .btn-ghost:hover{background:var(--surface-3);}
+  .btn-danger{background:var(--danger); color:#2A0705;}
+  .btn-danger:hover{filter:brightness(1.08);}
+  .btn-safe{background:var(--safe); color:#052A1C;}
+  .btn-sm{padding:9px 12px; font-size:13px; width:auto;}
+  .btn:disabled{opacity:0.5; cursor:not-allowed;}
+
+  .link-btn{background:none; border:none; color:var(--accent); font-size:13px; font-weight:500; padding:4px;}
+
+  /* ---------- Auth screen ---------- */
+  .auth-hero{display:flex; flex-direction:column; align-items:center; text-align:center; padding:26px 6px 8px;}
+  .auth-tagline{color:var(--text-dim); font-size:13.5px; margin-top:6px; max-width:260px; line-height:1.5;}
+  .tabs{display:flex; background:var(--surface-2); border:1px solid var(--border); border-radius:99px; padding:3px; margin:22px 0 20px;}
+  .tab{flex:1; text-align:center; padding:9px 0; font-size:13.5px; font-weight:600; color:var(--text-dim); border-radius:99px; transition:all .15s;}
+  .tab.active{background:var(--accent); color:#0B1420;}
+  .auth-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px 20px;}
+  .divider-note{text-align:center; font-size:12px; color:var(--text-faint); margin-top:16px;}
+
+  /* ---------- Bottom nav ---------- */
+  .bottom-nav{
+    position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+    width:100%; max-width:432px;
+    background:rgba(20,24,28,0.92); backdrop-filter:blur(10px);
+    border-top:1px solid var(--border-soft);
+    display:flex; z-index:5;
+    padding-bottom:env(safe-area-inset-bottom,0);
+  }
+  .nav-item{flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:11px 0 9px; background:none; border:none; color:var(--text-faint);}
+  .nav-item svg{width:21px; height:21px;}
+  .nav-item span{font-size:10.5px; font-weight:500;}
+  .nav-item.active{color:var(--accent);}
+  .nav-item.alert-flash.active{color:var(--danger);}
+
+  /* ---------- Cards / sections ---------- */
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px;}
+  .section-title{font-size:15px; font-weight:600; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between;}
+  .section-title .muted{font-size:12px; font-weight:500; color:var(--text-faint);}
+
+  /* ---------- Gauges (home) ---------- */
+  .gauge-row{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:18px 0;}
+  .gauge-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 8px; display:flex; flex-direction:column; align-items:center; gap:8px;}
+  .gauge-label{font-size:11px; color:var(--text-dim); font-weight:500;}
+  .gauge-value{font-family:'Space Grotesk'; font-size:20px; font-weight:700;}
+  .gauge-unit{font-size:10px; color:var(--text-faint); margin-top:-6px;}
+
+  .risk-panel{
+    background:linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+    border:1px solid var(--border); border-radius:var(--radius);
+    padding:22px 18px; display:flex; flex-direction:column; align-items:center; gap:10px;
+    position:relative; overflow:hidden;
+  }
+  .risk-ring-wrap{position:relative; width:150px; height:150px; margin:6px 0;}
+  .risk-center{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .risk-state{font-family:'Space Grotesk'; font-size:15px; font-weight:700;}
+  .risk-sub{font-size:11px; color:var(--text-faint); margin-top:3px;}
+
+  .test-note{display:flex; gap:9px; align-items:flex-start; background:var(--warn-dim); border:1px solid rgba(255,180,58,0.3); border-radius:var(--radius-sm); padding:11px 12px; font-size:12px; color:#FFC968; line-height:1.5; margin-bottom:16px;}
+  .test-note svg{width:15px; height:15px; flex-shrink:0; margin-top:1px;}
+
+  /* ---------- Modal ---------- */
+  .modal-overlay{position:fixed; inset:0; background:rgba(8,10,12,0.72); backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; z-index:50; padding:20px;}
+  .modal{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:26px 22px; width:100%; max-width:360px; text-align:center;}
+  .modal.danger-modal{border-color:rgba(255,75,62,0.4);}
+  .modal-icon{width:52px; height:52px; border-radius:50%; background:var(--danger-dim); display:flex; align-items:center; justify-content:center; margin:0 auto 16px;}
+  .modal-icon svg{width:26px; height:26px; color:var(--danger);}
+  .countdown-num{font-family:'Space Grotesk'; font-size:44px; font-weight:700; color:var(--danger); margin:10px 0;}
+  .toast{position:fixed; bottom:96px; left:50%; transform:translateX(-50%); background:var(--surface-3); border:1px solid var(--border); color:var(--text); padding:11px 18px; border-radius:99px; font-size:13px; font-weight:500; z-index:60; box-shadow:0 8px 24px rgba(0,0,0,0.4); animation:toastIn .2s ease;}
+  @keyframes toastIn{from{opacity:0; transform:translate(-50%,8px);} to{opacity:1; transform:translate(-50%,0);}}
+
+  /* ---------- History ---------- */
+  .history-item{display:flex; gap:12px; padding:13px 0; border-bottom:1px solid var(--border-soft);}
+  .history-item:last-child{border-bottom:none;}
+  .hist-dot{width:9px; height:9px; border-radius:50%; margin-top:5px; flex-shrink:0;}
+  .hist-dot.sent{background:var(--safe);}
+  .hist-dot.failed{background:var(--danger);}
+  .hist-dot.cancelled{background:var(--text-faint);}
+  .hist-dot.sim{background:var(--warn);}
+  .hist-title{font-size:13.5px; font-weight:600;}
+  .hist-meta{font-size:11.5px; color:var(--text-faint); margin-top:2px;}
+  .hist-readings{font-size:11px; color:var(--text-dim); margin-top:5px; display:flex; gap:10px;}
+  .empty-state{text-align:center; padding:34px 10px; color:var(--text-faint);}
+  .empty-state svg{width:34px; height:34px; margin-bottom:10px; opacity:.5;}
+  .empty-state p{font-size:13px;}
+
+  /* ---------- Profile ---------- */
+  .profile-header{display:flex; flex-direction:column; align-items:center; text-align:center; padding:10px 0 24px;}
+  .avatar{width:64px; height:64px; border-radius:50%; background:var(--surface-2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk'; font-size:24px; font-weight:700; color:var(--accent); margin-bottom:12px;}
+  .info-row{display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border-soft); font-size:13.5px;}
+  .info-row:last-child{border-bottom:none;}
+  .info-row .k{color:var(--text-dim);}
+  .info-row .v{font-weight:500;}
+
+  .section-gap{margin-top:18px;}
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .checkbox-row{display:flex; align-items:center; gap:9px; font-size:13px; color:var(--text-dim); margin:10px 0 4px;}
+  .checkbox-row input{width:15px; height:15px; accent-color:var(--accent);}
+
+  ::selection{background:var(--accent); color:#0B1420;}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:0.01ms !important;} }
+</style>
+</head>
+<body>
+<div id="frame"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================
+   SUPABASE CLIENT
+   ========================================================= */
+const SUPABASE_URL = 'https://bxzbskokdzhrsnunbbed.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_toz-R8bG8cICkXXC97Ae-Q_Ou84eC2b';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+function maskEmail(email){
+  const [name, domain] = email.split('@');
+  if(!domain) return email;
+  return name.slice(0,2) + '***@' + domain;
+}
+
+async function sha256(text){
+  const enc = new TextEncoder().encode(text);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+/* =========================================================
+   APP STATE
+   ========================================================= */
+const state = {
+  view: 'auth',            // auth | home | medical | alert | profile
+  authTab: 'login',        // login | signup | forgot
+  user: null,              // { username, name }
+  monitoring: false,
+  sensors: { speed:0, impact:0, rotation:0 },
+  flags: { speed:0, impact:0, rotation:0 }, // timestamps of last trigger, 0 = inactive
+  countdown: null,          // {secondsLeft, timer, reading}
+  toastTimer: null
+};
+
+const THRESH = { IMPACT: 16, ROTATION: 180, SPEED_DROP: 12, WINDOW_MS: 3000 };
+
+const SECURITY_QUESTIONS = [
+  "Your favourite colour?",
+  "Your first pet's name?",
+  "Your birth city?",
+  "Your favourite teacher's name?",
+  "Your childhood nickname?"
+];
+
+const frame = document.getElementById('frame');
+
+/* =========================================================
+   ICONS (inline SVG, stroke-based)
+   ========================================================= */
+const ICONS = {
+  home:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H10v-5.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V20h3.5a1 1 0 0 0 1-1v-9"/></svg>`,
+  medical:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12.5h4l1.6-3.6 2.4 6.8 1.8-4.2h5.2"/><path d="M12 20.5c-4.5-2.6-8-5.7-8-9.6C4 8 6 6 8.4 6c1.5 0 2.8.8 3.6 2 .8-1.2 2.1-2 3.6-2C18 6 20 8 20 10.9c0 3.9-3.5 7-8 9.6Z"/></svg>`,
+  alert:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-3.5 0-5.5 2.8-5.5 6.5 0 4-1.5 5.7-2.5 6.5h16c-1-.8-2.5-2.5-2.5-6.5C17.5 5.8 15.5 3 12 3Z"/><path d="M9.7 19.5a2.3 2.3 0 0 0 4.6 0"/></svg>`,
+  profile:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.3" r="3.3"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>`,
+  logo:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5.5v6c0 5.2 3.4 8.6 8 10 4.6-1.4 8-4.8 8-10v-6L12 2Z" fill="#4FA3FF" fill-opacity="0.16" stroke="#4FA3FF" stroke-width="1.6"/><path d="M8.5 12.5l2.3 2.3L15.7 9.5" stroke="#4FA3FF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  siren:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-3.5 0-5.5 2.8-5.5 6.5 0 4-1.5 5.7-2.5 6.5h16c-1-.8-2.5-2.5-2.5-6.5C17.5 5.8 15.5 3 12 3Z"/></svg>`,
+  warn:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 2.6 17.5A1 1 0 0 0 3.5 19h17a1 1 0 0 0 .9-1.5L13.7 3.9a1 1 0 0 0-1.7 0Z"/><path d="M12 9.5v4M12 16.5h.01"/></svg>`,
+  chevron:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`,
+  logout:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h3M14 16l4-4-4-4M18 12H9"/></svg>`,
+  trash:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16M8.5 6.5V5a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v1.5M18 6.5 17.2 19a1 1 0 0 1-1 1H7.8a1 1 0 0 1-1-1L6 6.5"/></svg>`,
+  empty:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h4l1.5-4L13 16l1.5-4H20"/></svg>`
+};
+
+/* =========================================================
+   TOAST
+   ========================================================= */
+function toast(msg){
+  const old = document.getElementById('toast'); if(old) old.remove();
+  const el = document.createElement('div');
+  el.id='toast'; el.className='toast'; el.textContent = msg;
+  document.body.appendChild(el);
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(()=>el.remove(), 2600);
+}
+
+/* =========================================================
+   RENDER ROOT
+   ========================================================= */
+function render(){
+  if(!state.user){ renderAuth(); return; }
+  frame.innerHTML = `
+    <div class="topbar">
+      <div class="brand">${ICONS.logo}<span class="brand-name">Raksha</span></div>
+      <div class="status-pill"><span class="status-dot ${state.monitoring?'on':''}" id="topStatusDot"></span><span id="topStatusText">${state.monitoring?'Monitoring':'Idle'}</span></div>
+    </div>
+    <div id="screenHost"></div>
+    <div class="bottom-nav">
+      ${navItem('home','Home')}
+      ${navItem('medical','Medical')}
+      ${navItem('alert','Alert')}
+      ${navItem('profile','Profile')}
+    </div>
+  `;
+  document.querySelectorAll('.nav-item').forEach(b=>{
+    b.addEventListener('click', ()=>{ state.view = b.dataset.view; render(); });
+  });
+  renderScreen();
+}
+
+function navItem(view, label){
+  const active = state.view===view ? 'active':'';
+  return `<button class="nav-item ${active}" data-view="${view}"><span>${ICONS[view]}</span><span>${label}</span></button>`;
+}
+
+function renderScreen(){
+  const host = document.getElementById('screenHost');
+  if(!host) return;
+  if(state.view==='home') return renderHome(host);
+  if(state.view==='medical') return renderMedical(host);
+  if(state.view==='alert') return renderAlert(host);
+  if(state.view==='profile') return renderProfile(host);
+}
+
+/* =========================================================
+   AUTH SCREEN
+   ========================================================= */
+function renderAuth(){
+  frame.innerHTML = `
+    <div class="screen" style="padding-bottom:24px;">
+      <div class="auth-hero">
+        <div style="width:54px;height:54px;">${ICONS.logo}</div>
+        <h1 style="font-size:22px;margin-top:10px;">Raksha</h1>
+        <p class="auth-tagline">Automatic crash detection for two-wheelers &amp; cars. When impact, rotation and a sudden speed drop happen together, Raksha alerts your emergency contact.</p>
+      </div>
+      <div class="tabs" id="authTabs">
+        <div class="tab ${state.authTab==='login'?'active':''}" data-tab="login">Log in</div>
+        <div class="tab ${state.authTab==='signup'?'active':''}" data-tab="signup">Sign up</div>
+      </div>
+      <div class="auth-card" id="authCard"></div>
+    </div>
+  `;
+  frame.querySelectorAll('#authTabs .tab').forEach(t=>{
+    t.addEventListener('click', ()=>{ state.authTab = t.dataset.tab; renderAuth(); });
+  });
+  const card = document.getElementById('authCard');
+  if(state.authTab==='login') renderLoginForm(card);
+  else if(state.authTab==='signup') renderSignupForm(card);
+  else renderForgotForm(card);
+}
+
+function renderLoginForm(card){
+  card.innerHTML = `
+    <div class="field"><label>Username</label><input id="loginUsername" autocomplete="username" placeholder="e.g. rahul_99"></div>
+    <div class="field">
+      <label>Password</label>
+      <div class="pass-wrap">
+        <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Your password">
+        <button type="button" class="pass-toggle" data-target="loginPassword">SHOW</button>
+      </div>
+    </div>
+    <div id="loginErr" class="field" style="display:none;"><span class="err"></span></div>
+    <button class="btn btn-primary" id="loginSubmit" style="margin-top:6px;">Log in</button>
+    <div class="divider-note"><button class="link-btn" id="forgotLink">Forgot password?</button></div>
+  `;
+  bindPassToggle(card);
+  document.getElementById('loginSubmit').addEventListener('click', doLogin);
+  document.getElementById('forgotLink').addEventListener('click', ()=>{ state.authTab='forgot'; renderAuth(); });
+  card.addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+}
+
+function renderSignupForm(card){
+  card.innerHTML = `
+    <div class="field"><label>Full name</label><input id="suName" placeholder="e.g. Rahul Sharma"></div>
+    <div class="field"><label>Username</label><input id="suUsername" placeholder="Choose a unique username"></div>
+    <div class="field"><label>Email</label><input id="suEmail" type="email" placeholder="you@example.com"></div>
+    <div class="field">
+      <label>Set password</label>
+      <div class="pass-wrap"><input id="suPassword" type="password" placeholder="At least 6 characters"><button type="button" class="pass-toggle" data-target="suPassword">SHOW</button></div>
+    </div>
+    <div class="field">
+      <label>Confirm password</label>
+      <div class="pass-wrap"><input id="suConfirm" type="password" placeholder="Re-enter password"><button type="button" class="pass-toggle" data-target="suConfirm">SHOW</button></div>
+    </div>
+    <div class="field">
+      <label>Security question</label>
+      <select id="suQuestion">${SECURITY_QUESTIONS.map(q=>`<option>${q}</option>`).join('')}</select>
+    </div>
+    <div class="field"><label>Your answer</label><input id="suAnswer" placeholder="Used to recover your password"></div>
+    <div id="suErr" class="field" style="display:none;"><span class="err"></span></div>
+    <button class="btn btn-primary" id="suSubmit" style="margin-top:6px;">Create account</button>
+    <p class="divider-note">Your login runs on Supabase Auth — password reset uses a real email link.</p>
+  `;
+  bindPassToggle(card);
+  document.getElementById('suSubmit').addEventListener('click', doSignup);
+}
+
+function renderForgotForm(card){
+  card.innerHTML = `
+    <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px;line-height:1.5;">Enter your username — we'll email a reset link to the address on your account.</p>
+    <div class="field"><label>Username</label><input id="fgUsername" placeholder="Your username"></div>
+    <div id="fgErr" class="field" style="display:none;"><span class="err"></span></div>
+    <button class="btn btn-primary" id="fgSend">Send reset link</button>
+    <div class="divider-note"><button class="link-btn" id="backToLogin">Back to log in</button></div>
+  `;
+  document.getElementById('backToLogin').addEventListener('click', ()=>{ state.authTab='login'; renderAuth(); });
+  document.getElementById('fgSend').addEventListener('click', async ()=>{
+    const errBox = document.getElementById('fgErr');
+    const uname = document.getElementById('fgUsername').value.trim().toLowerCase();
+    if(!uname){ showErr(errBox,'Enter your username.'); return; }
+    const { data: email, error } = await supabase.rpc('get_email_by_username', { uname });
+    if(error || !email){ showErr(errBox,'No account with that username.'); return; }
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.href.split('#')[0] });
+    if(resetErr){ showErr(errBox, resetErr.message); return; }
+    hideErr(errBox);
+    toast(`Reset link sent to ${maskEmail(email)}`);
+  });
+}
+
+function bindPassToggle(scope){
+  scope.querySelectorAll('.pass-toggle').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const inp = document.getElementById(btn.dataset.target);
+      const show = inp.type==='password';
+      inp.type = show ? 'text':'password';
+      btn.textContent = show ? 'HIDE':'SHOW';
+    });
+  });
+}
+function showErr(box, msg){ box.style.display='block'; box.querySelector('.err').textContent = msg; }
+function hideErr(box){ box.style.display='none'; }
+
+async function doLogin(){
+  const errBox = document.getElementById('loginErr');
+  const uname = document.getElementById('loginUsername').value.trim().toLowerCase();
+  const pass = document.getElementById('loginPassword').value;
+  if(!uname || !pass){ showErr(errBox,'Enter your username and password.'); return; }
+  const { data: email, error: rpcErr } = await supabase.rpc('get_email_by_username', { uname });
+  if(rpcErr || !email){ showErr(errBox,'No account found for this username.'); return; }
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+  if(error){
+    showErr(errBox, error.message === 'Email not confirmed' ? 'Please verify your email first — check your inbox.' : 'Incorrect username or password.');
+    return;
+  }
+  const { data: profile, error: profErr } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
+  if(profErr || !profile){ showErr(errBox,'Could not load your profile.'); return; }
+  state.user = { id: data.user.id, username: profile.username, name: profile.name, email: profile.email };
+  state.view='home';
+  render();
+  toast(`Welcome back, ${profile.name.split(' ')[0]}`);
+}
+
+async function doSignup(){
+  const errBox = document.getElementById('suErr');
+  const name = document.getElementById('suName').value.trim();
+  const uname = document.getElementById('suUsername').value.trim().toLowerCase();
+  const email = document.getElementById('suEmail').value.trim();
+  const pass = document.getElementById('suPassword').value;
+  const confirm = document.getElementById('suConfirm').value;
+  const q = document.getElementById('suQuestion').value;
+  const ans = document.getElementById('suAnswer').value.trim().toLowerCase();
+  if(!name||!uname||!email||!pass||!confirm||!ans){ showErr(errBox,'Please fill in every field.'); return; }
+  if(!/^[a-z0-9_.]{3,20}$/.test(uname)){ showErr(errBox,'Username: 3-20 chars, letters/numbers/_ only.'); return; }
+  if(!/^\S+@\S+\.\S+$/.test(email)){ showErr(errBox,'Enter a valid email.'); return; }
+  if(pass.length < 6){ showErr(errBox,'Password must be at least 6 characters.'); return; }
+  if(pass !== confirm){ showErr(errBox,'Passwords do not match.'); return; }
+  const { data: existingEmail } = await supabase.rpc('get_email_by_username', { uname });
+  if(existingEmail){ showErr(errBox,'That username is already taken.'); return; }
+  hideErr(errBox);
+  const secAHash = await sha256(ans);
+  const { data, error } = await supabase.auth.signUp({
+    email, password: pass,
+    options: { data: { username: uname, name, sec_q: q, sec_a_hash: secAHash } }
+  });
+  if(error){ showErr(errBox, error.message); return; }
+  if(data.session){
+    state.user = { id: data.user.id, username: uname, name, email };
+    state.view='home';
+    render();
+    toast('Account created — you\\'re in!');
+  } else {
+    toast(`Confirmation email sent to ${maskEmail(email)} — verify, then log in.`);
+    state.authTab='login';
+    renderAuth();
+  }
+}
+
+/* =========================================================
+   HOME — ACCIDENT DETECTION
+   ========================================================= */
+let sensorTimer = null, checkTimer = null;
+let speedBuffer = [];
+
+function renderHome(host){
+  host.innerHTML = `
+    <div class="screen">
+      <div class="test-note">${ICONS.warn}<span>Crash sensors (motion, rotation, GPS speed) need a phone browser to read real data. On a laptop, use <b>Simulate test accident</b> below to demo the alert flow.</span></div>
+
+      <div class="risk-panel">
+        <div class="risk-ring-wrap">
+          <svg viewBox="0 0 150 150" width="150" height="150">
+            <circle cx="75" cy="75" r="64" fill="none" stroke="var(--border)" stroke-width="10"/>
+            <circle id="riskRing" cx="75" cy="75" r="64" fill="none" stroke="var(--safe)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${2*Math.PI*64}" stroke-dashoffset="${2*Math.PI*64}" transform="rotate(-90 75 75)" style="transition:stroke-dashoffset .4s, stroke .4s;"/>
+          </svg>
+          <div class="risk-center">
+            <div id="riskState" class="risk-state" style="color:var(--safe);">All clear</div>
+            <div class="risk-sub" id="riskSub">Start monitoring below</div>
+          </div>
+        </div>
+        <button class="btn ${state.monitoring?'btn-ghost':'btn-primary'}" id="toggleMonitor" style="max-width:220px;">${state.monitoring?'Stop monitoring':'Start monitoring'}</button>
+      </div>
+
+      <div class="gauge-row">
+        <div class="gauge-card">
+          <span class="gauge-label">Speed</span>
+          <span class="gauge-value tabular" id="gSpeed">0</span>
+          <span class="gauge-unit">km/h</span>
+        </div>
+        <div class="gauge-card">
+          <span class="gauge-label">Impact</span>
+          <span class="gauge-value tabular" id="gImpact">0</span>
+          <span class="gauge-unit">m/s²</span>
+        </div>
+        <div class="gauge-card">
+          <span class="gauge-label">Rotation</span>
+          <span class="gauge-value tabular" id="gRotation">0</span>
+          <span class="gauge-unit">°/s</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">How detection works<span class="muted"></span></div>
+        <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;">Raksha watches three signals at once. If speed <b>suddenly drops</b>, impact force <b>spikes</b>, and rotation <b>spikes</b> — all within the same 3-second window — it's treated as a possible accident and the alert countdown starts.</p>
+      </div>
+
+      <button class="btn btn-danger" id="simulateBtn" style="margin-top:16px;">Simulate test accident</button>
+    </div>
+  `;
+  document.getElementById('toggleMonitor').addEventListener('click', toggleMonitoring);
+  document.getElementById('simulateBtn').addEventListener('click', ()=> triggerAccident(true, {speed:6, impact:27, rotation:310}));
+  updateGaugeDisplay();
+}
+
+function updateGaugeDisplay(){
+  const sEl=document.getElementById('gSpeed'), iEl=document.getElementById('gImpact'), rEl=document.getElementById('gRotation');
+  if(sEl) sEl.textContent = state.sensors.speed.toFixed(0);
+  if(iEl) iEl.textContent = state.sensors.impact.toFixed(1);
+  if(rEl) rEl.textContent = state.sensors.rotation.toFixed(0);
+  const ring = document.getElementById('riskRing');
+  const riskState = document.getElementById('riskState');
+  const riskSub = document.getElementById('riskSub');
+  if(!ring) return;
+  const now = Date.now();
+  const activeFlags = ['speed','impact','rotation'].filter(k => state.flags[k] && (now-state.flags[k] < THRESH.WINDOW_MS)).length;
+  const circumference = 2*Math.PI*64;
+  const pct = activeFlags/3;
+  ring.style.strokeDashoffset = circumference*(1-pct);
+  if(activeFlags>=3){ ring.style.stroke='var(--danger)'; riskState.style.color='var(--danger)'; riskState.textContent='Accident signal'; riskSub.textContent='Triggering alert…'; }
+  else if(activeFlags===2){ ring.style.stroke='var(--warn)'; riskState.style.color='var(--warn)'; riskState.textContent='Elevated risk'; riskSub.textContent=`${activeFlags}/3 signals active`; }
+  else if(activeFlags===1){ ring.style.stroke='var(--warn)'; riskState.style.color='var(--warn)'; riskState.textContent='Watching'; riskSub.textContent=`${activeFlags}/3 signals active`; }
+  else { ring.style.stroke='var(--safe)'; riskState.style.color='var(--safe)'; riskState.textContent = state.monitoring?'All clear':'Not monitoring'; riskSub.textContent = state.monitoring?'0/3 signals active':'Start monitoring below'; }
+}
+
+async function toggleMonitoring(){
+  if(state.monitoring){
+    stopMonitoring();
+  } else {
+    await startMonitoring();
+  }
+  render();
+}
+
+async function startMonitoring(){
+  // Request iOS motion permission if needed
+  try{
+    if(typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
+      const res = await DeviceMotionEvent.requestPermission();
+      if(res !== 'granted'){ toast('Motion permission denied — using manual mode.'); }
+    }
+  }catch(e){}
+
+  window.addEventListener('devicemotion', onDeviceMotion);
+
+  if(navigator.geolocation){
+    state._geoWatch = navigator.geolocation.watchPosition(onGeo, ()=>{}, {enableHighAccuracy:true, maximumAge:1000});
+  }
+
+  checkTimer = setInterval(evaluateAccidentConditions, 300);
+  state.monitoring = true;
+  document.getElementById('topStatusDot')?.classList.add('on');
+  const t = document.getElementById('topStatusText'); if(t) t.textContent='Monitoring';
+}
+
+function stopMonitoring(){
+  window.removeEventListener('devicemotion', onDeviceMotion);
+  if(state._geoWatch) navigator.geolocation.clearWatch(state._geoWatch);
+  clearInterval(checkTimer);
+  state.monitoring = false;
+  state.sensors = {speed:0, impact:0, rotation:0};
+  state.flags = {speed:0, impact:0, rotation:0};
+}
+
+function onDeviceMotion(e){
+  const acc = e.acceleration && (e.acceleration.x!=null) ? e.acceleration : e.accelerationIncludingGravity;
+  if(acc){
+    const mag = Math.sqrt((acc.x||0)**2 + (acc.y||0)**2 + (acc.z||0)**2);
+    const impact = e.acceleration && e.acceleration.x!=null ? mag : Math.abs(mag-9.8);
+    state.sensors.impact = impact;
+    if(impact > THRESH.IMPACT) state.flags.impact = Date.now();
+  }
+  const rot = e.rotationRate;
+  if(rot){
+    const rmag = Math.sqrt((rot.alpha||0)**2 + (rot.beta||0)**2 + (rot.gamma||0)**2);
+    state.sensors.rotation = rmag;
+    if(rmag > THRESH.ROTATION) state.flags.rotation = Date.now();
+  }
+  updateGaugeDisplay();
+}
+
+function onGeo(pos){
+  let speedKmh = 0;
+  if(pos.coords.speed != null && !isNaN(pos.coords.speed)) speedKmh = pos.coords.speed*3.6;
+  const now = Date.now();
+  speedBuffer.push({t:now, v:speedKmh});
+  speedBuffer = speedBuffer.filter(p => now-p.t < 6000);
+  if(speedBuffer.length >= 2){
+    const prevAvg = speedBuffer.slice(0,-1).reduce((a,p)=>a+p.v,0)/(speedBuffer.length-1);
+    const drop = prevAvg - speedKmh;
+    if(drop > THRESH.SPEED_DROP && prevAvg > 8) state.flags.speed = now;
+  }
+  state.sensors.speed = speedKmh;
+  updateGaugeDisplay();
+}
+
+function evaluateAccidentConditions(){
+  updateGaugeDisplay();
+  const now = Date.now();
+  const active = ['speed','impact','rotation'].every(k => state.flags[k] && (now-state.flags[k] < THRESH.WINDOW_MS));
+  if(active && !state.countdown){
+    triggerAccident(false, {speed: state.sensors.speed, impact: state.sensors.impact, rotation: state.sensors.rotation});
+  }
+}
+
+/* =========================================================
+   ACCIDENT TRIGGER + COUNTDOWN MODAL
+   ========================================================= */
+function triggerAccident(simulated, reading){
+  if(state.countdown) return;
+  let seconds = 10;
+  const overlay = document.createElement('div');
+  overlay.className='modal-overlay';
+  overlay.id='crashModal';
+  overlay.innerHTML = `
+    <div class="modal danger-modal">
+      <div class="modal-icon">${ICONS.siren}</div>
+      <h2 style="font-size:18px;">Possible accident detected</h2>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-top:8px;line-height:1.5;">${simulated?'Simulated test trigger.':'Impact, rotation and a speed drop happened together.'} An alert will be sent to your emergency contact email.</p>
+      <div class="countdown-num tabular" id="cdNum">${seconds}</div>
+      <button class="btn btn-safe" id="cancelAlertBtn">I'm okay — cancel alert</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  state.countdown = { reading, simulated };
+  const cdEl = document.getElementById('cdNum');
+  const timer = setInterval(()=>{
+    seconds -= 1;
+    if(cdEl) cdEl.textContent = seconds;
+    if(seconds<=0){
+      clearInterval(timer);
+      overlay.remove();
+      finalizeAlert(reading, simulated);
+      state.countdown = null;
+    }
+  },1000);
+  document.getElementById('cancelAlertBtn').addEventListener('click', async ()=>{
+    clearInterval(timer);
+    overlay.remove();
+    state.countdown = null;
+    state.flags = {speed:0, impact:0, rotation:0};
+    await addHistoryEntry({...reading, status:'Cancelled by user', simulated});
+    toast('Alert cancelled.');
+  });
+}
+
+async function finalizeAlert(reading, simulated){
+  state.flags = {speed:0, impact:0, rotation:0};
+  if(simulated){
+    await addHistoryEntry({...reading, status:'Simulated', simulated:true});
+    toast('Simulated alert logged to history.');
+    if(state.view==='alert') renderScreen();
+    return;
+  }
+  const status = await sendEmergencyEmail(reading);
+  await addHistoryEntry({...reading, status, simulated:false});
+  toast(status==='Sent' ? 'Emergency alert sent!' : `Alert logged (${status}).`);
+  if(state.view==='alert') renderScreen();
+}
+
+async function sendEmergencyEmail(reading){
+  const { data: medical } = await supabase.from('medical_info').select('*').eq('user_id', state.user.id).maybeSingle();
+  if(!medical || !medical.email) return 'No email set';
+  const { data: cfg } = await supabase.from('email_settings').select('*').eq('id',1).maybeSingle();
+  if(!cfg || !cfg.service_id || !cfg.template_id || !cfg.public_key) return 'Email not configured';
+
+  let locationStr = 'Unavailable';
+  try{
+    const pos = await new Promise((res,rej)=> navigator.geolocation.getCurrentPosition(res,rej,{timeout:3000}));
+    locationStr = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
+  }catch(e){}
+
+  const params = {
+    to_email: medical.email,
+    user_name: state.user.name,
+    blood_group: medical.blood_group || 'Not set',
+    condition: medical.disease || 'None listed',
+    contact: medical.contact || 'Not set',
+    family_contact: medical.family_contact || 'Not set',
+    speed: reading.speed.toFixed(1),
+    impact: reading.impact.toFixed(1),
+    rotation: reading.rotation.toFixed(1),
+    location: locationStr,
+    time: new Date().toLocaleString()
+  };
+
+  try{
+    const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ service_id: cfg.service_id, template_id: cfg.template_id, user_id: cfg.public_key, template_params: params })
+    });
+    return res.ok ? 'Sent' : 'Failed';
+  }catch(e){ return 'Failed'; }
+}
+
+async function addHistoryEntry(entry){
+  await supabase.from('alert_history').insert({
+    user_id: state.user.id,
+    speed: entry.speed, impact: entry.impact, rotation: entry.rotation,
+    status: entry.status, simulated: !!entry.simulated
+  });
+}
+
+/* =========================================================
+   MEDICAL INFO
+   ========================================================= */
+async function renderMedical(host){
+  const { data } = await supabase.from('medical_info').select('*').eq('user_id', state.user.id).maybeSingle();
+  const d = data || {};
+  host.innerHTML = `
+    <div class="screen">
+      <div class="section-title">Medical &amp; contact info</div>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:18px;line-height:1.5;">This is sent to whoever's email you set below, the moment an accident is detected.</p>
+      <div class="field"><label>Name</label><input id="mName" value="${esc(d.name||state.user.name)}"></div>
+      <div class="grid-2">
+        <div class="field"><label>Blood group</label>
+          <select id="mBlood">
+            ${['A+','A-','B+','B-','AB+','AB-','O+','O-'].map(b=>`<option ${d.blood_group===b?'selected':''}>${b}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Contact number</label><input id="mContact" value="${esc(d.contact||'')}" placeholder="+91 9xxxxxxxxx"></div>
+      </div>
+      <div class="field"><label>Existing medical condition(s)</label><input id="mDisease" value="${esc(d.disease||'')}" placeholder="e.g. Asthma, Diabetes — or None"></div>
+      <div class="field"><label>Family / emergency contact number</label><input id="mFamily" value="${esc(d.family_contact||'')}" placeholder="+91 9xxxxxxxxx"></div>
+      <div class="field"><label>Alert recipient email</label><input id="mEmail" type="email" value="${esc(d.email||'')}" placeholder="family@example.com"></div>
+      <button class="btn btn-primary" id="mSave" style="margin-top:6px;">Save medical info</button>
+    </div>
+  `;
+  document.getElementById('mSave').addEventListener('click', async ()=>{
+    const payload = {
+      user_id: state.user.id,
+      name: document.getElementById('mName').value.trim(),
+      blood_group: document.getElementById('mBlood').value,
+      contact: document.getElementById('mContact').value.trim(),
+      disease: document.getElementById('mDisease').value.trim(),
+      family_contact: document.getElementById('mFamily').value.trim(),
+      email: document.getElementById('mEmail').value.trim()
+    };
+    const { error } = await supabase.from('medical_info').upsert(payload, { onConflict: 'user_id' });
+    toast(error ? 'Could not save — try again.' : 'Medical info saved.');
+  });
+}
+
+/* =========================================================
+   EMERGENCY ALERT (history + email settings)
+   ========================================================= */
+async function renderAlert(host){
+  const { data: historyData } = await supabase.from('alert_history').select('*').eq('user_id', state.user.id).order('ts', { ascending:false }).limit(30);
+  const history = (historyData||[]).map(h=>({ ...h, ts: new Date(h.ts).getTime(), speed:+h.speed, impact:+h.impact, rotation:+h.rotation }));
+  const { data: cfgData } = await supabase.from('email_settings').select('*').eq('id',1).maybeSingle();
+  const cfg = cfgData || {};
+  host.innerHTML = `
+    <div class="screen">
+      <div class="section-title">Emergency alert history</div>
+      <div class="card" style="padding:6px 18px;">
+        ${history.length===0 ? `
+          <div class="empty-state">${ICONS.empty}<p>No alerts yet. Detected or simulated accidents will show up here.</p></div>
+        ` : history.map(h=>`
+          <div class="history-item">
+            <span class="hist-dot ${dotClass(h.status)}"></span>
+            <div style="flex:1;">
+              <div class="hist-title">${h.status}${h.simulated?' · Test':''}</div>
+              <div class="hist-meta">${new Date(h.ts).toLocaleString()}</div>
+              <div class="hist-readings tabular">
+                <span>Speed ${h.speed.toFixed(0)} km/h</span>
+                <span>Impact ${h.impact.toFixed(1)} m/s²</span>
+                <span>Rot ${h.rotation.toFixed(0)}°/s</span>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="card section-gap">
+        <div class="section-title">Email alert settings <span class="muted">Global</span></div>
+        <p style="font-size:12px;color:var(--text-dim);margin-bottom:14px;line-height:1.6;">Create a free account at emailjs.com, set up an email service + template, and paste the IDs here so real alerts can be sent.</p>
+        <div class="field"><label>Service ID</label><input id="cfgService" value="${esc(cfg.service_id||'')}" placeholder="service_xxxxxxx"></div>
+        <div class="field"><label>Template ID</label><input id="cfgTemplate" value="${esc(cfg.template_id||'')}" placeholder="template_xxxxxxx"></div>
+        <div class="field"><label>Public key</label><input id="cfgKey" value="${esc(cfg.public_key||'')}" placeholder="public key"></div>
+        <button class="btn btn-ghost" id="cfgSave">Save email settings</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('cfgSave').addEventListener('click', async ()=>{
+    const { error } = await supabase.from('email_settings').update({
+      service_id: document.getElementById('cfgService').value.trim(),
+      template_id: document.getElementById('cfgTemplate').value.trim(),
+      public_key: document.getElementById('cfgKey').value.trim()
+    }).eq('id', 1);
+    toast(error ? 'Could not save — try again.' : 'Email settings saved.');
+  });
+}
+function dotClass(status){
+  if(status==='Sent') return 'sent';
+  if(status==='Simulated') return 'sim';
+  if(status==='Cancelled by user') return 'cancelled';
+  return 'failed';
+}
+
+/* =========================================================
+   PROFILE
+   ========================================================= */
+function renderProfile(host){
+  host.innerHTML = `
+    <div class="screen">
+      <div class="profile-header">
+        <div class="avatar">${state.user.name.charAt(0).toUpperCase()}</div>
+        <h2 style="font-size:17px;">${esc(state.user.name)}</h2>
+        <p style="font-size:12.5px;color:var(--text-faint);margin-top:3px;">@${esc(state.user.username)}</p>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Account</div>
+        <div class="field"><label>Full name</label><input id="pName" value="${esc(state.user.name)}"></div>
+        <button class="btn btn-ghost" id="pSaveName">Save name</button>
+      </div>
+
+      <div class="card section-gap">
+        <div class="section-title">Change password</div>
+        <div class="field"><label>Current password</label><input id="pOldPass" type="password"></div>
+        <div class="field"><label>New password</label><input id="pNewPass" type="password" placeholder="At least 6 characters"></div>
+        <div id="pPassErr" class="field" style="display:none;"><span class="err"></span></div>
+        <button class="btn btn-ghost" id="pSavePass">Update password</button>
+      </div>
+
+      <button class="btn btn-ghost" id="pLogout" style="margin-top:18px;">${ICONS.logout} Log out</button>
+      <button class="btn btn-ghost" id="pDelete" style="margin-top:10px;color:var(--danger);border-color:rgba(255,75,62,0.3);">${ICONS.trash} Delete account</button>
+    </div>
+  `;
+  document.getElementById('pSaveName').addEventListener('click', async ()=>{
+    const newName = document.getElementById('pName').value.trim();
+    if(!newName) return;
+    const { error } = await supabase.from('profiles').update({ name:newName }).eq('id', state.user.id);
+    if(error){ toast('Could not update name.'); return; }
+    state.user.name = newName;
+    toast('Name updated.');
+    render();
+  });
+  document.getElementById('pSavePass').addEventListener('click', async ()=>{
+    const errBox = document.getElementById('pPassErr');
+    const oldPass = document.getElementById('pOldPass').value;
+    const newPass = document.getElementById('pNewPass').value;
+    if(newPass.length < 6){ showErr(errBox,'New password must be at least 6 characters.'); return; }
+    const { error: reauthErr } = await supabase.auth.signInWithPassword({ email: state.user.email, password: oldPass });
+    if(reauthErr){ showErr(errBox,'Current password is incorrect.'); return; }
+    const { error } = await supabase.auth.updateUser({ password:newPass });
+    if(error){ showErr(errBox, error.message); return; }
+    hideErr(errBox);
+    toast('Password updated.');
+  });
+  document.getElementById('pLogout').addEventListener('click', doLogout);
+  document.getElementById('pDelete').addEventListener('click', confirmDeleteAccount);
+}
+
+async function doLogout(){
+  stopMonitoring();
+  await supabase.auth.signOut();
+  state.user = null;
+  state.view = 'auth';
+  state.authTab = 'login';
+  render();
+}
+
+function confirmDeleteAccount(){
+  const overlay = document.createElement('div');
+  overlay.className='modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <h2 style="font-size:17px;">Clear your data?</h2>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-top:10px;line-height:1.5;">This removes your profile, medical info and alert history, then signs you out. This cannot be undone.</p>
+      <div style="display:flex;gap:10px;margin-top:18px;">
+        <button class="btn btn-ghost" id="delCancel">Cancel</button>
+        <button class="btn btn-danger" id="delConfirm">Clear &amp; sign out</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('delCancel').addEventListener('click', ()=>overlay.remove());
+  document.getElementById('delConfirm').addEventListener('click', async ()=>{
+    const uid = state.user.id;
+    await supabase.from('alert_history').delete().eq('user_id', uid);
+    await supabase.from('medical_info').delete().eq('user_id', uid);
+    await supabase.from('profiles').delete().eq('id', uid);
+    overlay.remove();
+    doLogout();
+  });
+}
+
+function showSetNewPasswordModal(){
+  if(document.getElementById('recoveryModal')) return;
+  const overlay = document.createElement('div');
+  overlay.className='modal-overlay';
+  overlay.id='recoveryModal';
+  overlay.innerHTML = `
+    <div class="modal">
+      <h2 style="font-size:17px;">Set a new password</h2>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-top:8px;">You clicked a password reset link — choose a new password below.</p>
+      <div class="field" style="margin-top:16px;text-align:left;"><label>New password</label><input id="rpNew" type="password" placeholder="At least 6 characters"></div>
+      <div id="rpErr" class="field" style="display:none;text-align:left;"><span class="err"></span></div>
+      <button class="btn btn-primary" id="rpSave">Update password</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('rpSave').addEventListener('click', async ()=>{
+    const errBox = document.getElementById('rpErr');
+    const newPass = document.getElementById('rpNew').value;
+    if(newPass.length < 6){ showErr(errBox,'At least 6 characters.'); return; }
+    const { error } = await supabase.auth.updateUser({ password:newPass });
+    if(error){ showErr(errBox, error.message); return; }
+    overlay.remove();
+    await supabase.auth.signOut();
+    state.user = null; state.view='auth'; state.authTab='login';
+    render();
+    toast('Password updated — please log in.');
+  });
+}
+
+/* =========================================================
+   UTIL
+   ========================================================= */
+function esc(str){ return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* =========================================================
+   BOOTSTRAP — restore session if present, watch for password recovery
+   ========================================================= */
+supabase.auth.onAuthStateChange((event)=>{
+  if(event === 'PASSWORD_RECOVERY') showSetNewPasswordModal();
+});
+
+(async function init(){
+  const { data: { session } } = await supabase.auth.getSession();
+  if(session && session.user){
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+    if(profile){ state.user = { id: session.user.id, username: profile.username, name: profile.name, email: profile.email }; state.view='home'; }
+  }
+  render();
+})();
+
+})();
+</script>
+</body>
+</html>
